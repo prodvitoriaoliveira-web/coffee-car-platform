@@ -3,12 +3,15 @@ import * as repo from "@/lib/repo";
 import { computeEventTotals } from "@/lib/calc";
 import { formatCurrency, formatPercent, formatDate } from "@/lib/format";
 import { Badge, Card, PageHeader, StatTile, Table, Td, Th, EmptyState } from "@/components/ui";
+import { FinChart } from "@/components/fin-chart";
 
 export default async function DashboardPage() {
   const events = await repo.listEvents();
   const allSaleItems = await repo.listAllSaleItems();
   const allCosts = await repo.listAllEventCosts();
   const allShifts = await repo.listAllStaffShifts();
+  const insumos = await repo.listInsumos();
+  const upcomingEvents = await repo.listUpcomingEvents(5);
 
   const totals = events.map((event) => ({
     event,
@@ -25,6 +28,19 @@ export default async function DashboardPage() {
 
   const payablesPending = await repo.aggregatePendingAmount("Payable");
   const receivablesPending = await repo.aggregatePendingAmount("Receivable");
+  const accountsBalance = await repo.aggregateAccountsBalance();
+  const overdue = await repo.aggregateOverdue();
+
+  const now = new Date();
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const monthTotals = totals.filter((t) => t.event.startDate?.startsWith(currentMonthKey));
+  const monthResult = monthTotals.reduce((s, t) => s + t.totals.result, 0);
+
+  const chartData = totals
+    .slice()
+    .sort((a, b) => (a.event.startDate ?? "").localeCompare(b.event.startDate ?? ""))
+    .slice(-8)
+    .map((t) => ({ name: t.event.name, revenue: t.totals.revenue, costs: t.totals.totalCosts }));
 
   return (
     <div>
@@ -42,9 +58,65 @@ export default async function DashboardPage() {
         <StatTile label="Eventos cadastrados" value={String(events.length)} />
       </div>
 
+      <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+        <StatTile
+          label="Saldo atual"
+          value={formatCurrency(accountsBalance)}
+          tone={accountsBalance >= 0 ? "positive" : "negative"}
+          hint="Soma das contas em Financeiro"
+        />
+        <StatTile
+          label="Resultado do mês"
+          value={formatCurrency(monthResult)}
+          tone={monthResult >= 0 ? "positive" : "negative"}
+          hint={monthTotals.length > 0 ? `${monthTotals.length} evento(s) neste mês` : "Nenhum evento neste mês"}
+        />
+        <StatTile label="Estoque" value={String(insumos.length)} hint="Insumos cadastrados" />
+        <StatTile
+          label="Contas vencidas"
+          value={formatCurrency(overdue.amount)}
+          tone={overdue.count > 0 ? "negative" : "neutral"}
+          hint={overdue.count > 0 ? `${overdue.count} conta(s) em atraso` : "Nenhuma em atraso"}
+        />
+      </div>
+
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
         <StatTile label="Contas a pagar pendentes" value={formatCurrency(payablesPending)} tone="negative" />
         <StatTile label="Contas a receber pendentes" value={formatCurrency(receivablesPending)} tone="positive" />
+      </div>
+
+      <div className="mt-8">
+        <h2 className="mb-3 text-lg font-semibold text-[var(--brand-dark)]">Próximos eventos</h2>
+        {upcomingEvents.length === 0 ? (
+          <Card>
+            <EmptyState>Nenhum evento futuro cadastrado.</EmptyState>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {upcomingEvents.map((event) => (
+              <Card key={event.id} className="p-4">
+                <Link href={`/eventos/${event.id}`} className="font-medium text-[var(--brand)] hover:underline">
+                  {event.name}
+                </Link>
+                <p className="mt-1 text-sm text-black/60">{formatDate(event.startDate)}</p>
+                <div className="mt-2">
+                  <Badge
+                    tone={event.status === "FECHADO" ? "neutral" : event.status === "EM_ANDAMENTO" ? "warning" : "brand"}
+                  >
+                    {event.status.replace("_", " ")}
+                  </Badge>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8">
+        <h2 className="mb-3 text-lg font-semibold text-[var(--brand-dark)]">Gráficos financeiros</h2>
+        <Card className="p-5">
+          <FinChart data={chartData} />
+        </Card>
       </div>
 
       <div className="mt-8">
