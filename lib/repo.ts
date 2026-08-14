@@ -5,6 +5,10 @@ export type EventStatus = "PLANEJADO" | "EM_ANDAMENTO" | "FECHADO";
 export type CostCategory = "INSUMO" | "FRETE" | "REPASSE" | "EQUIPE" | "ALUGUEL" | "OUTRO";
 export type PayableStatus = "PENDENTE" | "PAGO";
 export type ReceivableStatus = "PENDENTE" | "RECEBIDO";
+export type PayableCategory = "FORNECEDOR" | "ALUGUEL" | "EQUIPE" | "IMPOSTOS" | "MARKETING" | "OUTRO";
+export type PaymentMethod = "DINHEIRO" | "PIX" | "CARTAO" | "TRANSFERENCIA" | "BOLETO" | "OUTRO";
+export type StockMovementType = "ENTRADA" | "SAIDA" | "PERDA" | "DEVOLUCAO";
+export type ChecklistGroup = "MATERIAIS" | "TRANSPORTE" | "MONTAGEM" | "PRODUCAO" | "DESMONTAGEM";
 
 export type EventRow = {
   id: string;
@@ -14,6 +18,10 @@ export type EventRow = {
   endDate: string | null;
   status: EventStatus;
   venueCommissionPct: number | null;
+  clientName: string | null;
+  guestCount: number | null;
+  responsible: string | null;
+  contractedValue: number | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -67,13 +75,39 @@ export type PartnerShareRow = {
 export type InsumoRow = {
   id: string;
   name: string;
+  category: string | null;
   packageLabel: string | null;
   packageQty: number;
   packageUnit: string | null;
   packagePrice: number | null;
+  supplier: string | null;
+  currentStock: number;
+  minStock: number | null;
+  replenishValue: number | null;
+  location: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type StockMovementRow = {
+  id: string;
+  insumoId: string;
+  type: StockMovementType;
+  quantity: number;
+  eventId: string | null;
+  date: string;
+  notes: string | null;
+  createdAt: string;
+};
+
+export type ChecklistItemRow = {
+  id: string;
+  eventId: string;
+  groupName: ChecklistGroup;
+  description: string;
+  done: boolean;
+  createdAt: string;
 };
 
 export type AccountRow = { id: string; name: string; notes: string | null };
@@ -95,11 +129,15 @@ export type PayableRow = {
   id: string;
   description: string;
   supplier: string | null;
+  category: string | null;
+  costCenter: string | null;
   amount: number;
   dueDate: string | null;
+  paymentMethod: string | null;
   paidDate: string | null;
   status: PayableStatus;
   eventId: string | null;
+  attachmentUrl: string | null;
   notes: string | null;
   createdAt: string;
 };
@@ -110,6 +148,7 @@ export type ReceivableRow = {
   payer: string | null;
   amount: number;
   dueDate: string | null;
+  paymentMethod: string | null;
   receivedDate: string | null;
   status: ReceivableStatus;
   eventId: string | null;
@@ -222,16 +261,50 @@ export async function createEvent(data: {
   endDate: string | null;
   status: EventStatus;
   venueCommissionPct: number | null;
+  clientName?: string | null;
+  guestCount?: number | null;
+  responsible?: string | null;
+  contractedValue?: number | null;
   notes: string | null;
 }): Promise<string> {
   const id = newId();
   const ts = nowIso();
   await exec(
-    `INSERT INTO Event (id, name, location, startDate, endDate, status, venueCommissionPct, notes, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, data.name, data.location, data.startDate, data.endDate, data.status, data.venueCommissionPct, data.notes, ts, ts]
+    `INSERT INTO Event (id, name, location, startDate, endDate, status, venueCommissionPct, clientName, guestCount, responsible, contractedValue, notes, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      data.name,
+      data.location,
+      data.startDate,
+      data.endDate,
+      data.status,
+      data.venueCommissionPct,
+      data.clientName ?? null,
+      data.guestCount ?? null,
+      data.responsible ?? null,
+      data.contractedValue ?? null,
+      data.notes,
+      ts,
+      ts,
+    ]
   );
   return id;
+}
+
+export async function updateEventDetails(
+  id: string,
+  data: {
+    clientName: string | null;
+    guestCount: number | null;
+    responsible: string | null;
+    contractedValue: number | null;
+  }
+) {
+  await exec(
+    "UPDATE Event SET clientName = ?, guestCount = ?, responsible = ?, contractedValue = ?, updatedAt = ? WHERE id = ?",
+    [data.clientName, data.guestCount, data.responsible, data.contractedValue, nowIso(), id]
+  );
 }
 
 export async function updateEventStatus(id: string, status: EventStatus) {
@@ -305,6 +378,30 @@ export async function deletePartnerShare(id: string) {
   await exec("DELETE FROM PartnerShare WHERE id = ?", [id]);
 }
 
+// ---------- Checklist do evento ----------
+export async function listChecklistItems(eventId: string): Promise<ChecklistItemRow[]> {
+  const rows = await getRows<ChecklistItemRow>(
+    "SELECT * FROM EventChecklistItem WHERE eventId = ? ORDER BY groupName ASC, createdAt ASC",
+    [eventId]
+  );
+  return rows.map((r) => ({ ...r, done: Boolean(r.done) }));
+}
+
+export async function addChecklistItem(data: { eventId: string; groupName: ChecklistGroup; description: string }) {
+  await exec(
+    "INSERT INTO EventChecklistItem (id, eventId, groupName, description, done, createdAt) VALUES (?, ?, ?, ?, 0, ?)",
+    [newId(), data.eventId, data.groupName, data.description, nowIso()]
+  );
+}
+
+export async function toggleChecklistItem(id: string, currentlyDone: boolean) {
+  await exec("UPDATE EventChecklistItem SET done = ? WHERE id = ?", [currentlyDone ? 0 : 1, id]);
+}
+
+export async function deleteChecklistItem(id: string) {
+  await exec("DELETE FROM EventChecklistItem WHERE id = ?", [id]);
+}
+
 // ---------- Insumos ----------
 export async function listInsumos(): Promise<InsumoRow[]> {
   return getRows<InsumoRow>("SELECT * FROM Insumo ORDER BY name ASC");
@@ -312,22 +409,107 @@ export async function listInsumos(): Promise<InsumoRow[]> {
 
 export async function createInsumo(data: {
   name: string;
+  category?: string | null;
   packageLabel: string | null;
   packageQty: number;
   packageUnit: string | null;
   packagePrice: number | null;
+  supplier?: string | null;
+  currentStock?: number;
+  minStock?: number | null;
+  replenishValue?: number | null;
+  location?: string | null;
   notes: string | null;
 }) {
   const ts = nowIso();
   await exec(
-    `INSERT INTO Insumo (id, name, packageLabel, packageQty, packageUnit, packagePrice, notes, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [newId(), data.name, data.packageLabel, data.packageQty, data.packageUnit, data.packagePrice, data.notes, ts, ts]
+    `INSERT INTO Insumo (id, name, category, packageLabel, packageQty, packageUnit, packagePrice, supplier, currentStock, minStock, replenishValue, location, notes, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      newId(),
+      data.name,
+      data.category ?? null,
+      data.packageLabel,
+      data.packageQty,
+      data.packageUnit,
+      data.packagePrice,
+      data.supplier ?? null,
+      data.currentStock ?? 0,
+      data.minStock ?? null,
+      data.replenishValue ?? null,
+      data.location ?? null,
+      data.notes,
+      ts,
+      ts,
+    ]
   );
 }
 
 export async function deleteInsumo(id: string) {
   await exec("DELETE FROM Insumo WHERE id = ?", [id]);
+}
+
+// ---------- Movimentações de estoque ----------
+const STOCK_DELTA_SIGN: Record<StockMovementType, 1 | -1> = {
+  ENTRADA: 1,
+  DEVOLUCAO: 1,
+  SAIDA: -1,
+  PERDA: -1,
+};
+
+export async function listStockMovements(
+  limit = 200
+): Promise<(StockMovementRow & { insumoName: string; eventName: string | null })[]> {
+  return getRows(
+    `SELECT m.*, i.name as insumoName, e.name as eventName FROM StockMovement m
+     JOIN Insumo i ON i.id = m.insumoId
+     LEFT JOIN Event e ON e.id = m.eventId
+     ORDER BY m.date DESC, m.createdAt DESC LIMIT ?`,
+    [limit]
+  );
+}
+
+export async function listStockMovementsForEvent(
+  eventId: string
+): Promise<(StockMovementRow & { insumoName: string })[]> {
+  return getRows(
+    `SELECT m.*, i.name as insumoName FROM StockMovement m
+     JOIN Insumo i ON i.id = m.insumoId
+     WHERE m.eventId = ? ORDER BY m.createdAt DESC`,
+    [eventId]
+  );
+}
+
+export async function createStockMovement(data: {
+  insumoId: string;
+  type: StockMovementType;
+  quantity: number;
+  eventId: string | null;
+  date: string;
+  notes: string | null;
+}) {
+  await exec(
+    `INSERT INTO StockMovement (id, insumoId, type, quantity, eventId, date, notes, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [newId(), data.insumoId, data.type, data.quantity, data.eventId, data.date, data.notes, nowIso()]
+  );
+  const delta = STOCK_DELTA_SIGN[data.type] * data.quantity;
+  await exec("UPDATE Insumo SET currentStock = currentStock + ?, updatedAt = ? WHERE id = ?", [
+    delta,
+    nowIso(),
+    data.insumoId,
+  ]);
+}
+
+export async function deleteStockMovement(id: string) {
+  const row = await getRow<StockMovementRow>("SELECT * FROM StockMovement WHERE id = ?", [id]);
+  if (!row) return;
+  const delta = STOCK_DELTA_SIGN[row.type] * row.quantity;
+  await exec("UPDATE Insumo SET currentStock = currentStock - ?, updatedAt = ? WHERE id = ?", [
+    delta,
+    nowIso(),
+    row.insumoId,
+  ]);
+  await exec("DELETE FROM StockMovement WHERE id = ?", [id]);
 }
 
 // ---------- Staff ----------
@@ -435,15 +617,32 @@ export async function listPayables(): Promise<(PayableRow & { eventName: string 
 export async function createPayable(data: {
   description: string;
   supplier: string | null;
+  category?: string | null;
+  costCenter?: string | null;
   amount: number;
   dueDate: string | null;
+  paymentMethod?: string | null;
   eventId: string | null;
+  attachmentUrl?: string | null;
   notes: string | null;
 }) {
   await exec(
-    `INSERT INTO Payable (id, description, supplier, amount, dueDate, status, eventId, notes, createdAt)
-     VALUES (?, ?, ?, ?, ?, 'PENDENTE', ?, ?, ?)`,
-    [newId(), data.description, data.supplier, data.amount, data.dueDate, data.eventId, data.notes, nowIso()]
+    `INSERT INTO Payable (id, description, supplier, category, costCenter, amount, dueDate, paymentMethod, status, eventId, attachmentUrl, notes, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDENTE', ?, ?, ?, ?)`,
+    [
+      newId(),
+      data.description,
+      data.supplier,
+      data.category ?? null,
+      data.costCenter ?? null,
+      data.amount,
+      data.dueDate,
+      data.paymentMethod ?? null,
+      data.eventId,
+      data.attachmentUrl ?? null,
+      data.notes,
+      nowIso(),
+    ]
   );
 }
 
@@ -472,13 +671,24 @@ export async function createReceivable(data: {
   payer: string | null;
   amount: number;
   dueDate: string | null;
+  paymentMethod?: string | null;
   eventId: string | null;
   notes: string | null;
 }) {
   await exec(
-    `INSERT INTO Receivable (id, description, payer, amount, dueDate, status, eventId, notes, createdAt)
-     VALUES (?, ?, ?, ?, ?, 'PENDENTE', ?, ?, ?)`,
-    [newId(), data.description, data.payer, data.amount, data.dueDate, data.eventId, data.notes, nowIso()]
+    `INSERT INTO Receivable (id, description, payer, amount, dueDate, paymentMethod, status, eventId, notes, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, 'PENDENTE', ?, ?, ?)`,
+    [
+      newId(),
+      data.description,
+      data.payer,
+      data.amount,
+      data.dueDate,
+      data.paymentMethod ?? null,
+      data.eventId,
+      data.notes,
+      nowIso(),
+    ]
   );
 }
 
@@ -537,4 +747,77 @@ export async function listUpcomingEvents(limit = 5): Promise<EventRow[]> {
     today,
     limit,
   ]);
+}
+
+// Valor já recebido (Receivables com status RECEBIDO) vinculado a um evento —
+// usado na aba Financeiro do evento pra comparar com o valor contratado.
+export async function sumReceivedForEvent(eventId: string): Promise<number> {
+  const row = await getRow<{ total: number }>(
+    "SELECT COALESCE(SUM(amount), 0) as total FROM Receivable WHERE eventId = ? AND status = 'RECEBIDO'",
+    [eventId]
+  );
+  return row?.total ?? 0;
+}
+
+export async function listPayablesForEvent(eventId: string): Promise<PayableRow[]> {
+  return getRows<PayableRow>("SELECT * FROM Payable WHERE eventId = ? ORDER BY dueDate ASC", [eventId]);
+}
+
+export async function listReceivablesForEvent(eventId: string): Promise<ReceivableRow[]> {
+  return getRows<ReceivableRow>("SELECT * FROM Receivable WHERE eventId = ? ORDER BY dueDate ASC", [eventId]);
+}
+
+// ---------- Fluxo de caixa ----------
+// Entradas = Receivables recebidos (por receivedDate). Saídas = Payables pagos (por paidDate).
+// Agrupado por mês (YYYY-MM), últimos `months` meses com movimento.
+export async function monthlyCashFlow(): Promise<{ month: string; entradas: number; saidas: number }[]> {
+  const entradas = await getRows<{ month: string; total: number }>(
+    `SELECT substr(receivedDate, 1, 7) as month, COALESCE(SUM(amount), 0) as total
+     FROM Receivable WHERE status = 'RECEBIDO' AND receivedDate IS NOT NULL
+     GROUP BY month`
+  );
+  const saidas = await getRows<{ month: string; total: number }>(
+    `SELECT substr(paidDate, 1, 7) as month, COALESCE(SUM(amount), 0) as total
+     FROM Payable WHERE status = 'PAGO' AND paidDate IS NOT NULL
+     GROUP BY month`
+  );
+  const months = new Set<string>([...entradas.map((e) => e.month), ...saidas.map((s) => s.month)]);
+  const byMonth = Array.from(months)
+    .sort()
+    .map((month) => ({
+      month,
+      entradas: entradas.find((e) => e.month === month)?.total ?? 0,
+      saidas: saidas.find((s) => s.month === month)?.total ?? 0,
+    }));
+  return byMonth;
+}
+
+// ---------- Relatórios ----------
+export async function despesasPorCategoria(): Promise<{ category: string; total: number }[]> {
+  return getRows<{ category: string; total: number }>(
+    `SELECT category, COALESCE(SUM(amount), 0) as total FROM EventCost GROUP BY category ORDER BY total DESC`
+  );
+}
+
+export async function receitasPorCliente(): Promise<{ clientName: string; total: number }[]> {
+  return getRows<{ clientName: string; total: number }>(
+    `SELECT COALESCE(e.clientName, 'Sem cliente informado') as clientName, COALESCE(SUM(s.quantity * s.unitPrice), 0) as total
+     FROM SaleItem s JOIN Event e ON e.id = s.eventId
+     GROUP BY clientName ORDER BY total DESC`
+  );
+}
+
+export async function contasEmAberto(): Promise<{
+  payables: (PayableRow & { eventName: string | null })[];
+  receivables: (ReceivableRow & { eventName: string | null })[];
+}> {
+  const payables = await getRows<PayableRow & { eventName: string | null }>(
+    `SELECT p.*, e.name as eventName FROM Payable p LEFT JOIN Event e ON e.id = p.eventId
+     WHERE p.status = 'PENDENTE' ORDER BY p.dueDate ASC`
+  );
+  const receivables = await getRows<ReceivableRow & { eventName: string | null }>(
+    `SELECT r.*, e.name as eventName FROM Receivable r LEFT JOIN Event e ON e.id = r.eventId
+     WHERE r.status = 'PENDENTE' ORDER BY r.dueDate ASC`
+  );
+  return { payables, receivables };
 }
