@@ -8,10 +8,18 @@ export default function NovoEventoPage() {
       <Card className="p-6">
         <form action={createEvent} className="space-y-4">
           <Field label="Nome do evento" name="name" required placeholder="Ex: Adapta Summit" />
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Cliente" name="clientName" placeholder="Ex: Adapta Educação" />
+            <Field label="Responsável" name="responsible" placeholder="Quem cuida do evento" />
+          </div>
           <Field label="Local" name="location" placeholder="Ex: São Paulo" />
           <div className="grid grid-cols-2 gap-4">
             <Field label="Data início" name="startDate" type="date" />
             <Field label="Data fim" name="endDate" type="date" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Quantidade de convidados" name="guestCount" type="number" step="1" placeholder="Ex: 150" />
+            <Field label="Valor contratado (R$)" name="contractedValue" type="number" step="0.01" placeholder="Ex: 50000" />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-black/70">Status</label>
