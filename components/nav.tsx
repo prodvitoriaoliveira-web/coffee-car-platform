@@ -7,11 +7,13 @@ import { signOutAction } from "@/lib/actions/auth-actions";
 const links = [
   { href: "/dashboard", label: "Resumo" },
   { href: "/eventos", label: "Eventos" },
-  { href: "/insumos", label: "Custos & Insumos" },
+  { href: "/insumos", label: "Estoque" },
   { href: "/financeiro", label: "Financeiro" },
   { href: "/staff", label: "Staff" },
   { href: "/contas-a-pagar", label: "A Pagar" },
   { href: "/contas-a-receber", label: "A Receber" },
+  { href: "/fluxo-de-caixa", label: "Fluxo de Caixa" },
+  { href: "/relatorios", label: "Relatórios" },
 ];
 
 export function Nav({ userName }: { userName?: string | null }) {
