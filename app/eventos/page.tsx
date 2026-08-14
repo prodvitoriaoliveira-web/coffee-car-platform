@@ -27,6 +27,7 @@ export default async function EventosPage() {
           <thead>
             <tr>
               <Th>Evento</Th>
+              <Th>Cliente</Th>
               <Th>Local</Th>
               <Th>Status</Th>
               <Th>Data</Th>
@@ -48,6 +49,7 @@ export default async function EventosPage() {
                       {event.name}
                     </Link>
                   </Td>
+                  <Td>{event.clientName ?? "—"}</Td>
                   <Td>{event.location ?? "—"}</Td>
                   <Td>
                     <Badge
