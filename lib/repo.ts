@@ -501,3 +501,40 @@ export async function aggregatePendingAmount(table: "Payable" | "Receivable"): P
   ]);
   return row?.total ?? 0;
 }
+
+// Saldo atual: soma dos saldos de todas as contas (Financeiro). Cada lançamento no
+// LedgerEntry debita a conta de origem (fromAccountId) — não há lado de crédito
+// explícito, então o saldo agregado é sempre <= 0 (representa quanto as contas têm
+// a receber de volta do caixa do negócio).
+export async function aggregateAccountsBalance(): Promise<number> {
+  const row = await getRow<{ total: number }>(
+    "SELECT COALESCE(SUM(amount), 0) as total FROM LedgerEntry WHERE fromAccountId IS NOT NULL"
+  );
+  return -(row?.total ?? 0);
+}
+
+// Contas (a pagar + a receber) pendentes cujo vencimento já passou.
+export async function aggregateOverdue(): Promise<{ count: number; amount: number }> {
+  const today = nowIso().slice(0, 10);
+  const payables = await getRow<{ c: number; total: number }>(
+    "SELECT COUNT(*) as c, COALESCE(SUM(amount), 0) as total FROM Payable WHERE status = 'PENDENTE' AND dueDate IS NOT NULL AND dueDate < ?",
+    [today]
+  );
+  const receivables = await getRow<{ c: number; total: number }>(
+    "SELECT COUNT(*) as c, COALESCE(SUM(amount), 0) as total FROM Receivable WHERE status = 'PENDENTE' AND dueDate IS NOT NULL AND dueDate < ?",
+    [today]
+  );
+  return {
+    count: (payables?.c ?? 0) + (receivables?.c ?? 0),
+    amount: (payables?.total ?? 0) + (receivables?.total ?? 0),
+  };
+}
+
+// Eventos com data de início hoje ou no futuro, ordenados do mais próximo pro mais distante.
+export async function listUpcomingEvents(limit = 5): Promise<EventRow[]> {
+  const today = nowIso().slice(0, 10);
+  return getRows<EventRow>("SELECT * FROM Event WHERE startDate IS NOT NULL AND startDate >= ? ORDER BY startDate ASC LIMIT ?", [
+    today,
+    limit,
+  ]);
+}
