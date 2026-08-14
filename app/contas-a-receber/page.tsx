@@ -3,6 +3,15 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { Badge, Button, Card, PageHeader, StatTile, Table, Td, Th, EmptyState } from "@/components/ui";
 import { createReceivable, deleteReceivable, toggleReceivableReceived } from "@/lib/actions/contas-actions";
 
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  DINHEIRO: "Dinheiro",
+  PIX: "Pix",
+  CARTAO: "Cartão",
+  TRANSFERENCIA: "Transferência",
+  BOLETO: "Boleto",
+  OUTRO: "Outro",
+};
+
 export default async function ContasAReceberPage() {
   const receivables = await repo.listReceivables();
   const events = await repo.listEvents();
@@ -14,7 +23,7 @@ export default async function ContasAReceberPage() {
 
   return (
     <div>
-      <PageHeader title="Contas a Receber" subtitle="Repasses de parceiros, reembolsos e outros recebimentos" />
+      <PageHeader title="Contas a Receber" subtitle="Vendas, repasses de parceiros e outros recebimentos" />
 
       <div className="grid grid-cols-2 gap-4">
         <StatTile label="Pendente" value={formatCurrency(totalPendente)} tone="warning" />
@@ -31,9 +40,10 @@ export default async function ContasAReceberPage() {
             <thead>
               <tr>
                 <Th>Descrição</Th>
-                <Th>Pagador</Th>
-                <Th>Evento</Th>
+                <Th>Cliente/Pagador</Th>
+                <Th>Evento/venda</Th>
                 <Th>Vencimento</Th>
+                <Th>Forma de receb.</Th>
                 <Th className="text-right">Valor</Th>
                 <Th>Status</Th>
                 <Th></Th>
@@ -48,6 +58,7 @@ export default async function ContasAReceberPage() {
                     <Td>{r.payer ?? "—"}</Td>
                     <Td>{r.eventName ?? "—"}</Td>
                     <Td>{formatDate(r.dueDate)}</Td>
+                    <Td>{r.paymentMethod ? PAYMENT_METHOD_LABEL[r.paymentMethod] ?? r.paymentMethod : "—"}</Td>
                     <Td className="text-right font-medium">{formatCurrency(r.amount)}</Td>
                     <Td>
                       <form action={toggleReceivableReceived}>
@@ -59,6 +70,9 @@ export default async function ContasAReceberPage() {
                           </Badge>
                         </button>
                       </form>
+                      {r.status === "RECEBIDO" && r.receivedDate && (
+                        <p className="mt-1 text-[11px] text-black/40">{formatDate(r.receivedDate)}</p>
+                      )}
                     </Td>
                     <Td className="text-right">
                       <form action={deleteReceivable}>
@@ -80,9 +94,20 @@ export default async function ContasAReceberPage() {
         <h2 className="mb-3 text-sm font-semibold text-[var(--brand-dark)]">+ Nova conta a receber</h2>
         <form action={createReceivable} className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <TextField label="Descrição" name="description" required />
-          <TextField label="Pagador" name="payer" />
+          <TextField label="Cliente/Pagador" name="payer" />
           <TextField label="Valor (R$)" name="amount" type="number" step="0.01" required />
           <TextField label="Vencimento" name="dueDate" type="date" />
+          <div>
+            <label className="mb-1 block text-xs font-medium text-black/60">Forma de recebimento</label>
+            <select name="paymentMethod" className="w-full rounded-lg border border-black/15 px-2 py-2 text-sm">
+              <option value="">—</option>
+              {Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-black/60">Evento (opcional)</label>
             <select name="eventId" className="w-full rounded-lg border border-black/15 px-2 py-2 text-sm">
