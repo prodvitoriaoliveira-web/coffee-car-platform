@@ -25,11 +25,27 @@ export async function createEvent(formData: FormData) {
     endDate: toDateOrNull(formData.get("endDate")),
     status: (String(formData.get("status") ?? "PLANEJADO") as repo.EventStatus),
     venueCommissionPct: formData.get("venueCommissionPct") ? toNum(formData.get("venueCommissionPct")) / 100 : null,
+    clientName: String(formData.get("clientName") ?? "").trim() || null,
+    guestCount: formData.get("guestCount") ? Math.round(toNum(formData.get("guestCount"))) : null,
+    responsible: String(formData.get("responsible") ?? "").trim() || null,
+    contractedValue: formData.get("contractedValue") ? toNum(formData.get("contractedValue")) : null,
     notes: String(formData.get("notes") ?? "").trim() || null,
   });
 
   revalidatePath("/eventos");
   redirect(`/eventos/${id}`);
+}
+
+export async function updateEventDetails(formData: FormData) {
+  const eventId = String(formData.get("eventId"));
+  await repo.updateEventDetails(eventId, {
+    clientName: String(formData.get("clientName") ?? "").trim() || null,
+    guestCount: formData.get("guestCount") ? Math.round(toNum(formData.get("guestCount"))) : null,
+    responsible: String(formData.get("responsible") ?? "").trim() || null,
+    contractedValue: formData.get("contractedValue") ? toNum(formData.get("contractedValue")) : null,
+  });
+  revalidatePath(`/eventos/${eventId}`);
+  revalidatePath("/eventos");
 }
 
 export async function updateEventStatus(eventId: string, status: repo.EventStatus) {
@@ -129,5 +145,30 @@ export async function deletePartnerShare(formData: FormData) {
   const id = String(formData.get("id"));
   const eventId = String(formData.get("eventId"));
   await repo.deletePartnerShare(id);
+  revalidatePath(`/eventos/${eventId}`);
+}
+
+export async function addChecklistItem(formData: FormData) {
+  const eventId = String(formData.get("eventId"));
+  const description = String(formData.get("description") ?? "").trim();
+  const groupName = String(formData.get("groupName") ?? "").trim() as repo.ChecklistGroup;
+  if (!description || !groupName) return;
+
+  await repo.addChecklistItem({ eventId, groupName, description });
+  revalidatePath(`/eventos/${eventId}`);
+}
+
+export async function toggleChecklistItem(formData: FormData) {
+  const id = String(formData.get("id"));
+  const eventId = String(formData.get("eventId"));
+  const done = formData.get("done") === "1";
+  await repo.toggleChecklistItem(id, done);
+  revalidatePath(`/eventos/${eventId}`);
+}
+
+export async function deleteChecklistItem(formData: FormData) {
+  const id = String(formData.get("id"));
+  const eventId = String(formData.get("eventId"));
+  await repo.deleteChecklistItem(id);
   revalidatePath(`/eventos/${eventId}`);
 }
